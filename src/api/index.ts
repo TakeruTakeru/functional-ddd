@@ -1,10 +1,12 @@
-import { Err, err, type Result } from "neverthrow";
-import type { Context } from "~/ctx";
-import { DbRepository, Storage } from "~/external";
+import { err, okAsync } from "neverthrow";
 import {
-	authorizeTrainer,
-	upgradeTrainer,
-} from "~/application/trainer-usecases";
+	type TrainerBasic,
+	TrainerDraftSchema,
+	TrainerUpgradeCommandSchema,
+} from "~/domain/trainer";
+import { DbRepository } from "~/external";
+import { getRequiredParam } from "~/infrastructure/params";
+import { authorizeTrainer, upgradeTrainer } from "~/workflow/trainer-usecases";
 
 type EndpointReturnTypes = {
 	authorizeTrainer: ReturnType<typeof authorizeTrainer>;
@@ -17,25 +19,28 @@ function handle<T extends Endpoint>(
 	endpoint: T,
 	params: Map<string, string>,
 ): EndpointReturnTypes[T];
-function handle(
-	endpoint: Endpoint,
-	params: Map<string, string>,
-): EndpointReturnTypes[Endpoint] | Result<never, Error>;
-
 function handle(endpoint: Endpoint, params: Map<string, string>) {
 	const db = new DbRepository();
-	const storage = new Storage();
-	const ctx = {
-		db,
-		storage,
-		params,
-	} as Context;
 
 	switch (endpoint) {
 		case "authorizeTrainer":
-			return authorizeTrainer(ctx);
+			return getRequiredParam(params, TrainerDraftSchema).asyncAndThen(
+				authorizeTrainer(db.insert),
+			);
 		case "upgradeTrainer":
-			return upgradeTrainer(ctx);
+			return getRequiredParam(params, TrainerUpgradeCommandSchema).asyncAndThen(
+				(command) =>
+					upgradeTrainer(
+						(trainerId) => {
+							return okAsync({
+								id: command.trainerId,
+								name: "hoge",
+							} as TrainerBasic); // Adjust based on TrainerBasic structure
+						},
+						() => new Date(),
+						db.update,
+					)(command),
+			);
 		default:
 			return err(new Error("Unknown endpoint"));
 	}

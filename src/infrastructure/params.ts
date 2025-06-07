@@ -1,5 +1,5 @@
+import { type Result, err, ok } from "neverthrow";
 import type { z } from "zod";
-import { err, ok, type Result } from "neverthrow";
 
 /**
  * Map<string, string>からパラメータを抽出し、Zodスキーマでバリデーションする
@@ -23,7 +23,7 @@ export function parseParams<T>(
 		}
 
 		const errorMessages = result.error.errors
-			.map((err) => `${err.path.join(".")}: ${err.message}`)
+			.map((err: z.ZodIssue) => `${err.path.join(".")}: ${err.message}`)
 			.join(", ");
 		return err(new Error(`Validation failed: ${errorMessages}`));
 	} catch (error) {
@@ -33,21 +33,26 @@ export function parseParams<T>(
 
 export function getRequiredParam<T extends z.ZodType>(
 	params: Map<string, string>,
-	key: string,
 	schema: T,
 ): Result<z.infer<T>, Error> {
-	const value = params.get(key);
+	try {
+		// Mapをオブジェクトに変換
+		const paramsObject: Record<string, string> = {};
+		for (const [key, value] of params) {
+			paramsObject[key] = value;
+		}
 
-	if (value === undefined) {
-		return err(new Error(`Missing required parameter: ${key}`));
+		const result = schema.safeParse(paramsObject);
+
+		if (result.success) {
+			return ok(result.data);
+		}
+
+		const errorMessage = result.error.errors
+			.map((err: z.ZodIssue) => err.message)
+			.join(", ");
+		return err(new Error(`Invalid parameters: ${errorMessage}`));
+	} catch (error) {
+		return err(new Error(`Parameter parsing failed: ${error}`));
 	}
-
-	const result = schema.safeParse(value);
-
-	if (result.success) {
-		return ok(result.data);
-	}
-
-	const errorMessage = result.error.errors.map((err) => err.message).join(", ");
-	return err(new Error(`Invalid parameter ${key}: ${errorMessage}`));
 }

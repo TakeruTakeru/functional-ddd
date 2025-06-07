@@ -1,19 +1,33 @@
-import type { CreatedAt, UpdatedAt } from "~/domain/shared";
-import type { Brand } from "~/utils";
+import { z } from "zod";
+import { CreatedAtSchema, UpdatedAtSchema } from "~/domain/shared";
 
-type User = {
-	id: UserId;
-	name: UserName;
-	gender: Gender;
-	createdAt: CreatedAt;
-	updatedAt: UpdatedAt;
-};
+export const UserIdSchema = z
+	.string()
+	.min(1, "UserId must not be empty")
+	.max(100, "UserId must be less than 100 characters")
+	.brand<"UserId">();
+export const UserNameSchema = z
+	.string()
+	.min(1, "UserName must not be empty")
+	.max(100, "UserName must be less than 100 characters")
+	.brand<"UserName">();
+export const GenderSchema = z.enum(["male", "female"]);
 
-type UserId = Brand<string, "UserId">;
-type UserName = Brand<string, "UserName">;
-type Gender = "male" | "female";
+export type UserId = z.infer<typeof UserIdSchema>;
+export type UserName = z.infer<typeof UserNameSchema>;
+export type Gender = z.infer<typeof GenderSchema>;
 
-function createUser(userId: string, name: string, gender: Gender): User {
+export const UserSchema = z.object({
+	id: UserIdSchema,
+	name: UserNameSchema,
+	gender: GenderSchema,
+	createdAt: CreatedAtSchema,
+	updatedAt: UpdatedAtSchema,
+});
+
+export type User = z.infer<typeof UserSchema>;
+
+export function createUser(userId: string, name: string, gender: Gender): User {
 	return {
 		id: userId,
 		name,
@@ -22,6 +36,3 @@ function createUser(userId: string, name: string, gender: Gender): User {
 		updatedAt: new Date(),
 	} as User;
 }
-
-export type { User, Gender, UserId, UserName };
-export { createUser };

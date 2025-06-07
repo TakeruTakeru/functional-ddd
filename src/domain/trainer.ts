@@ -1,13 +1,17 @@
-import { err, ok } from "neverthrow";
+import { type Result, err, ok } from "neverthrow";
 import { z } from "zod";
-import type { CreatedAt, UpdatedAt } from "~/domain/shared";
-import type { Brand } from "~/utils";
+import {
+	type CreatedAt,
+	CreatedAtSchema,
+	type UpdatedAt,
+	UpdatedAtSchema,
+	buildFromZodDefault,
+} from "~/domain/shared";
 
-// ドメイン固有のZodスキーマ
 export const TrainerIdSchema = z
 	.string()
 	.min(1, "TrainerId must not be empty")
-	.regex(/^\d+$/, "TrainerId must contain only digits")
+	.max(100, "TrainerId must be less than 100 characters")
 	.brand<"TrainerId">();
 
 export const TrainerNameSchema = z
@@ -16,33 +20,38 @@ export const TrainerNameSchema = z
 	.max(100, "TrainerName must be less than 100 characters")
 	.brand<"TrainerName">();
 
-// ブランド型定義（Zodと連携）
+export const TrainerExpiresAtSchema = z.date().brand<"ExpiredAt">();
+
 export type TrainerId = z.infer<typeof TrainerIdSchema>;
 export type TrainerName = z.infer<typeof TrainerNameSchema>;
-type ExpiredAt = Brand<Date, "ExpiredAt">;
+export type ExpiredAt = z.infer<typeof TrainerExpiresAtSchema>;
 
-type TrainerBasic = {
-	id: TrainerId;
-	name: TrainerName;
-	createdAt: CreatedAt;
-	updatedAt: UpdatedAt;
-};
-
-type TrainerPremium = {
-	id: TrainerId;
-	name: TrainerName;
-	expiresAt: ExpiredAt;
-	createdAt: CreatedAt;
-	updatedAt: UpdatedAt;
-};
-
-const TrainerDraftSchema = z.object({
+export const TrainerBasicSchema = z.object({
 	id: TrainerIdSchema,
 	name: TrainerNameSchema,
+	createdAt: CreatedAtSchema,
+	updatedAt: UpdatedAtSchema,
 });
-type TrainerDraft = z.infer<typeof TrainerDraftSchema>;
 
-function createTrainerBasic(draft: TrainerDraft) {
+export type TrainerBasic = z.infer<typeof TrainerBasicSchema>;
+
+export const TrainerPremiumSchema = z.object({
+	id: TrainerIdSchema,
+	name: TrainerNameSchema,
+	expiresAt: TrainerExpiresAtSchema,
+});
+
+export type TrainerPremium = z.infer<typeof TrainerPremiumSchema>;
+
+export const TrainerDraftSchema = z.object({
+	name: TrainerNameSchema,
+});
+
+export type TrainerDraft = z.infer<typeof TrainerDraftSchema>;
+
+export function createTrainerBasic(
+	draft: TrainerDraft,
+): Result<TrainerBasic, Error> {
 	const parsed = TrainerDraftSchema.safeParse(draft);
 
 	if (!parsed.success) {
@@ -50,28 +59,31 @@ function createTrainerBasic(draft: TrainerDraft) {
 	}
 
 	return ok({
-		id: parsed.data.id,
+		id: crypto.randomUUID() as TrainerId,
 		name: parsed.data.name,
 		createdAt: new Date() as CreatedAt,
 		updatedAt: new Date() as UpdatedAt,
 	} as TrainerBasic);
 }
 
-function upgrade(trainer: TrainerBasic, expiresAt: Date) {}
+export const TrainerUpgradeCommandSchema = z.object({
+	trainerId: TrainerIdSchema,
+});
 
-// バリデーション関数
-export function isTrainerId(value: unknown): value is TrainerId {
-	return TrainerIdSchema.safeParse(value).success;
+export type TrainerUpgradeCommand = z.infer<typeof TrainerUpgradeCommandSchema>;
+
+export function upgradeToPremiumTrainer(
+	trainer: TrainerBasic,
+	currentDate: Date,
+): Result<TrainerPremium, Error> {
+	const expiresAt = new Date(currentDate);
+	expiresAt.setFullYear(expiresAt.getFullYear() + 1); // 1年後に設定
+
+	return buildFromZodDefault(
+		TrainerPremiumSchema.safeParse({
+			id: trainer.id,
+			name: trainer.name,
+			expiresAt: TrainerExpiresAtSchema.parse(expiresAt),
+		}),
+	);
 }
-
-export function createTrainerId(value: unknown): TrainerId | null {
-	const result = TrainerIdSchema.safeParse(value);
-	return result.success ? result.data : null;
-}
-
-export function trainerId(value: unknown): TrainerId {
-	return TrainerIdSchema.parse(value);
-}
-
-export type { TrainerPremium, TrainerBasic, ExpiredAt };
-export { createTrainerBasic, upgrade };

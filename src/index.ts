@@ -1,13 +1,17 @@
 import { handle } from "~/api";
 
-function main() {
+async function main() {
+	// ユーザー作成
 	const params = new Map<string, string>();
-	params.set("trainerId", "12345");
-	const result = handle("authorizeTrainer", params);
-	const up = handle("upgradeTrainer", params);
-
+	params.set("name", "12345");
+	const result = await handle("authorizeTrainer", params);
 	console.log("Authorization Result:", result);
-	console.log("Upgrade Result:", up);
+
+	// トレーナーアップグレード
+	const upgradeParams = new Map<string, string>();
+	upgradeParams.set("trainerId", "12345");
+	const upgradeResult = await handle("upgradeTrainer", upgradeParams);
+	console.log("Upgrade Result:", upgradeResult);
 }
 
 main();
